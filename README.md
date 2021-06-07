@@ -1,4 +1,4 @@
-# esp_mqtt# Git flow
+# Git flow
 {
 	…or create a new repository on the command line
 	echo "# esp32_mqtt" >> README.md    
