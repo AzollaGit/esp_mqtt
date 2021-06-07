@@ -77,7 +77,7 @@ void mqtt_publish_task(void * arg)
         // vTaskDelay(50 / portTICK_PERIOD_MS);
         if (xQueueReceive(mqtt_publish_queue, &rec_buff, portMAX_DELAY) == pdPASS) {  // 接收UART数据
             ESP_LOGI(TAG, "rec_buff: %s", rec_buff);
-            msg_id = mqtt_send_data(rec_buff, strlen((const char *)rec_buff));  // MQTT推送数据
+            msg_id = mqtt_send_data((const char *)rec_buff, strlen((const char *)rec_buff));  // MQTT推送数据
             if (msg_id) {  // 有联网，判断事件消息，看有没有发布成功
                 // wait mqtt event mqtt publish over.
                 if (xQueueReceive(mqtt_event_queue, &mqtt_event_id, 100 / portTICK_PERIOD_MS) == pdPASS) {
