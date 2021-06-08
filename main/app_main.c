@@ -67,9 +67,13 @@ void app_main()
     ESP_ERROR_CHECK(example_connect());
 #else   // 配网！
     app_smartconfig_init();
+    #if 0
     while (wifi_connect_status() != WIFI_EVENT_STA_CONNECTED) {
         vTaskDelay(500 / portTICK_PERIOD_MS);   // 等待先联网
     }
+    #else 
+    vTaskDelay(2000 / portTICK_PERIOD_MS);   // 等待先联网
+    #endif
 #endif
 
 #if 0   // 使用 OTA ? (外设调试，建议先屏蔽网络代码！)

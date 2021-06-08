@@ -301,6 +301,8 @@ void app_smartconfig_init(void)
 
         ESP_ERROR_CHECK(esp_timer_create(&create_args, &out_handle));
         ESP_ERROR_CHECK(esp_timer_start_once(out_handle, 3000*1000));
+    } else {
+        ESP_LOGI(TAG, "WIFI smartconfig start...");
     }
 
 }

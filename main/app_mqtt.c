@@ -21,6 +21,7 @@
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 #include "freertos/queue.h"
+#include "freertos/event_groups.h"
 
 // #include "lwip/sockets.h"
 // #include "lwip/dns.h"
@@ -31,21 +32,24 @@
 
 #include "app_user.h"
 #include "app_mqtt.h"
+#include "app_uart.h"
 
 static const char *TAG = "APP_MQTT";
 
 static esp_mqtt_client_handle_t client_handle;
 
-// static const char *mqtt_topic_read = "/topic/read";
-// static const char *mqtt_topic_write = "/topic/write";
-static const char *mqtt_topic_read = "read";
-static const char *mqtt_topic_write = "write";
+static const char *mqtt_topic_read = "/topic/read";
+static const char *mqtt_topic_write = "/topic/write";
+// static const char *mqtt_topic_read = "read";
+// static const char *mqtt_topic_write = "write";
 static const int mqtt_qos = 2;  
 
-static bool mqtt_event_connect = 0;   // 1: connect; 0: disconnect.
-static esp_mqtt_event_id_t  mqtt_event_id = MQTT_EVENT_ANY;
+static uint8_t mqtt_event_connect = 0;   // 1: connect; 0: disconnect.
+//static esp_mqtt_event_id_t  mqtt_event_id = MQTT_EVENT_ANY;
 
 static bool mqtt_pubilsh_uart_data = 0;  // 1: 发布的是串口数据，才能通知队列，防止队列满了
+
+static bool mqtt_reissue_ack = 0;
 
 xQueueHandle mqtt_event_queue = NULL;
 xQueueHandle mqtt_publish_queue = NULL;
@@ -62,51 +66,97 @@ int mqtt_send_data(const char *data, int len)
 
 void mqtt_publish_task(void * arg)
 {
-    uint8_t *rec_buff = (uint8_t *)malloc(128);
-    if (rec_buff == NULL) {
-        ESP_LOGE(TAG, "%s malloc failed", __func__);
-        goto err;
-    }
-
+#define MQTT_EVENT_TIMEOUT   500        // MQTT响应超时时间
     int msg_id = -1;
 
-    esp_mqtt_event_id_t  mqtt_event_id = MQTT_EVENT_ANY;
+    esp_mqtt_event_id_t  mqtt_event_id = 0;
 
+    mqtt_data_t mqtt_data = { 0, { 0 }, 0 };
+
+    uint8_t *mqtt_txbuff = (uint8_t *) malloc(BUFF_MAX_SIZE + 8);
+    if (mqtt_txbuff == NULL) {
+         ESP_LOGE(TAG, "malloc err %s", __func__);
+    }
+    
     while (true) {
 
         // vTaskDelay(50 / portTICK_PERIOD_MS);
-        if (xQueueReceive(mqtt_publish_queue, &rec_buff, portMAX_DELAY) == pdPASS) {  // 接收UART数据
-            ESP_LOGI(TAG, "rec_buff: %s", rec_buff);
-            msg_id = mqtt_send_data((const char *)rec_buff, strlen((const char *)rec_buff));  // MQTT推送数据
+
+        if (xQueueReceive(mqtt_publish_queue, &mqtt_data, portMAX_DELAY) == pdPASS) {  // 接收UART数据
+            ESP_LOGI(TAG, "mqtt_data.value: %s", mqtt_data.value);
+            // 这里需要把MQTT数据格式重新排列： TIME（8/Byte） + DATA(len/Byte)
+            char *timestamp_string = NULL;
+            asprintf(&timestamp_string, "%010ld", mqtt_data.timestamp);  // 时间戳有10位数字
+            memcpy(mqtt_txbuff, timestamp_string, 10);
+            memcpy(mqtt_txbuff + 8, mqtt_data.value, mqtt_data.len);
+            free(timestamp_string);
+            msg_id = mqtt_send_data((const char *)mqtt_txbuff, mqtt_data.len + 10);  // MQTT推送数据
             if (msg_id) {  // 有联网，判断事件消息，看有没有发布成功
                 // wait mqtt event mqtt publish over.
-                if (xQueueReceive(mqtt_event_queue, &mqtt_event_id, 100 / portTICK_PERIOD_MS) == pdPASS) {
+                if (xQueueReceive(mqtt_event_queue, &mqtt_event_id, MQTT_EVENT_TIMEOUT / portTICK_PERIOD_MS) == pdPASS) {
                     if (mqtt_event_id != MQTT_EVENT_PUBLISHED) {  // mqtt publish event err.
-                        msg_id = -1;  // err...
+                        msg_id = -2;  // err...
                     }  
-                }  else {  // mqtt publish event timeout/err.
-                    msg_id = -1;  // err...
+                } else {  // mqtt publish event timeout/err.
+                    msg_id = -3;  // err...
                 }
             } 
 
             if (msg_id >= 0) {  // ok
-
+                ESP_LOGI(TAG, "mqtt publish ok...");
+                mqtt_reissue_ack = 0;
             } else {  // err.
-
+                ESP_LOGI(TAG, "mqtt publish err[%d]->%d", msg_id, mqtt_event_id);
+                if (mqtt_reissue_ack == 0) {  // 标识是断网补发的数据，不需要存的
+                    mqtt_spiffs_write(mqtt_data);
+                } 
             }
         }
     }
 
-err:
-    free(rec_buff);
+    vTaskDelete(NULL);
+}
+
+void spiffs_read_task(void *arg)
+{
+    mqtt_data_t mqtt_data = { 0, { 0 }, 0 };
+
+    while (true) {
+
+        vTaskDelay(800 / portTICK_PERIOD_MS);
+        if (mqtt_event_connect) {  // MQTT connect.
+
+            if (mqtt_reissue_ack == 0 ) {  // 还没应答，就不准
+                if (mqtt_spiffs_read(&mqtt_data) > 0) {  // 还有数据要发
+                    mqtt_reissue_ack = 1;  // 标识是断网补发的数据,成功后需要清零
+                }
+            }  
+
+            if (mqtt_reissue_ack) {  // 没有应答就一直发，除非断线
+                if (mqtt_publish_queue != NULL) {
+                    ESP_LOGI(TAG, "spiffs_read_task...");
+                    xQueueSend(mqtt_publish_queue, &mqtt_data, 10 / portTICK_RATE_MS);    
+                }
+            }
+        }
+    }
     vTaskDelete(NULL);
 }
 
 void mqtt_publish_task_init(void)
 {
-    mqtt_publish_queue = xQueueCreate(10, sizeof(uint32_t));
-    mqtt_event_queue = xQueueCreate(10, sizeof(uint16_t));
+    mqtt_publish_queue = xQueueCreate(10, sizeof(mqtt_data_t));
+    if (mqtt_publish_queue == NULL) {
+        ESP_LOGI(TAG, "mqtt_publish_queue ERR.");
+        return;
+    }
+    mqtt_event_queue = xQueueCreate(10, sizeof(esp_mqtt_event_id_t));
+    if (mqtt_event_queue == NULL) {
+        ESP_LOGI(TAG, "mqtt_event_queue ERR.");
+        return;
+    }
     xTaskCreate(mqtt_publish_task, "mqtt_publish_task", 2048, NULL, 8, NULL);
+    xTaskCreate(spiffs_read_task, "spiffs_read_task", 2048, NULL, 9, NULL);
 }
 
 /*
@@ -127,7 +177,11 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     int msg_id;
 
     if (mqtt_pubilsh_uart_data) {  // 发布的是串口数据，才发送队列消息报告MQTT 事件
-        xQueueSend(mqtt_publish_queue, &event->event_id, 10 / portTICK_RATE_MS);   
+        ESP_LOGI(TAG, "xQueueSend mqtt_event_queue event_id = %d", event->event_id);
+        if (mqtt_event_queue != NULL) {
+            esp_mqtt_event_id_t  mqtt_event_id = event->event_id;
+            xQueueSend(mqtt_event_queue, &mqtt_event_id, 50 / portTICK_RATE_MS);   
+        }
         mqtt_pubilsh_uart_data = 0;
     }
     

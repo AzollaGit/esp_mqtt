@@ -40,7 +40,7 @@ void time_sync_notification_cb(struct timeval *tv)
     ESP_LOGI(TAG, "Notification of a time synchronization event");
 }
 
-time_t sntp_timestamp(void)
+time_t sntp_get_timestamp(void)
 {
     time_t timestamp = 0; 
     // update 'timestamp' variable with current time
@@ -54,7 +54,9 @@ static void initialize_sntp(void)
 {
     ESP_LOGI(TAG, "Initializing SNTP");
     sntp_setoperatingmode(SNTP_OPMODE_POLL);
-    sntp_setservername(0, "pool.ntp.org");
+    sntp_setservername(0, "ntp4.aliyun.com");
+    sntp_setservername(1, "time4.cloud.tencent.com");
+    sntp_setservername(2, "pool.ntp.org");
     sntp_set_time_sync_notification_cb(time_sync_notification_cb);
 #ifdef CONFIG_SNTP_TIME_SYNC_METHOD_SMOOTH
     sntp_set_sync_mode(SNTP_SYNC_MODE_SMOOTH);

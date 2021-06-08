@@ -14,7 +14,10 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "freertos/event_groups.h"
+#include "freertos/queue.h"
+
 #include "driver/uart.h"
 #include "driver/gpio.h"
 #include "esp_wifi.h"
@@ -25,8 +28,9 @@
 #include "esp_spiffs.h"
 
 #include "app_uart.h"
-#include "app_sntp.h"
+#include "app_user.h"
 #include "app_mqtt.h"
+#include "app_sntp.h"
 
 
 static const char *TAG = "APP_UART";
@@ -44,8 +48,8 @@ static const char *TAG = "APP_UART";
  * - Pin assignment: see defines below (See Kconfig)
  */
 
-#define UART_PIN_TXD            (12)
-#define UART_PIN_RXD            (13)
+#define UART_PIN_TXD            (22)
+#define UART_PIN_RXD            (23)
 #define UART_PIN_RTS            (UART_PIN_NO_CHANGE)
 #define UART_PIN_CTS            (UART_PIN_NO_CHANGE)
 
@@ -67,17 +71,26 @@ static void uart_rev_task(void *arg)
     // Configure a temporary buffer for the incoming data
     uint8_t *data = (uint8_t *) malloc(UART_BUF_SIZE);
 
+    mqtt_data_t mqtt_data = { 0, { 0 }, 0 };
+
     while (true) {
         // Read data from the UART
-        int len = uart_read_bytes(UART_PORT_NUM, data, UART_BUF_SIZE, 50 / portTICK_RATE_MS);
+        int len = uart_read_bytes(UART_PORT_NUM, data, UART_BUF_SIZE, 20 / portTICK_RATE_MS);
         
         if (len) {
             // Write data back to the UART
             uart_write_bytes(UART_PORT_NUM, (const char *) data, len);
 
-            esp_log_buffer_char(TAG, (char *)(data), len);
+            //esp_log_buffer_char(TAG, (char *)(data), len);
 
-            xQueueSend(mqtt_publish_queue, &data, 10 / portTICK_RATE_MS);    
+            // 需要上报MQTT的数据
+            mqtt_data.timestamp = sntp_get_timestamp();
+            mqtt_data.len = len;
+            memcpy(mqtt_data.value, data, mqtt_data.len);
+
+            if (mqtt_publish_queue != NULL) {
+                xQueueSend(mqtt_publish_queue, &mqtt_data, 20 / portTICK_RATE_MS);  
+            }  
         }
     } 
 }

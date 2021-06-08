@@ -292,14 +292,28 @@ void app_spiffs_init(void)
         ESP_LOGI(TAG, "Partition size: total: %d, used: %d", total, used);
     }
 
+#if 0   // test
+
     mqtt_data_t mqtt_buff = { 1, { 1 , 2 , 3}, 3 };
-
-    mqtt_spiffs_write(mqtt_buff);
-
-    mqtt_spiffs_read(&mqtt_buff);
-
     mqtt_spiffs_erase();
+    int32_t used_num = 0;
+    mqtt_nvs_used(used_num, NVS_CMD_WRITE);     
+    used_num = mqtt_nvs_used(used_num, NVS_CMD_READ);     
+    for (int i = 1; i < 6; i++) {
+        mqtt_buff.timestamp = i;
+        mqtt_buff.len = i;
+        memset(mqtt_buff.value, i, mqtt_buff.len);
+        mqtt_spiffs_write(mqtt_buff);
+    }
     
+    // mqtt_spiffs_read(&mqtt_buff);
+#else
+    uint32_t data_size = spiffs_file_size("/spiffs/mqtt.bin");
+    if (data_size == 0) { // 空文件，
+        mqtt_nvs_used((int32_t)data_size, NVS_CMD_WRITE);      // 写0
+    }
+#endif
+
 }
 
 /*****************************************************************************************************
@@ -313,7 +327,66 @@ void app_spiffs_init(void)
 "wb+"   读写打开或建立一个二进制文件，允许读和写。
 "ab+"   读写打开一个二进制文件，允许读或在文件末追加数据。
 *****************************************************************************************************/
-void mqtt_spiffs_write(mqtt_data_t mqtt_info)
+
+int32_t mqtt_nvs_used(int32_t used_num, uint8_t rw_cmd)
+{
+    int32_t nvs_used = 0;  
+    nvs_handle_t my_handle;
+
+    error_t err = nvs_open("nvs_used", NVS_READWRITE, &my_handle);
+    if (err != ESP_OK) {
+        printf("Error (%s) opening NVS handle!\n", esp_err_to_name(err));
+    } else {
+        if (rw_cmd == NVS_CMD_READ) {  // read
+            err = nvs_get_i32(my_handle, "used_key", &nvs_used);
+            switch (err) {
+            case ESP_OK:
+                printf("nvs_used = %d\n", nvs_used);
+                break;
+            case ESP_ERR_NVS_NOT_FOUND:
+                printf("The value is not initialized yet!\n");
+                break;
+            default :
+                printf("Error (%s) reading!\n", esp_err_to_name(err));
+            }
+        } else {  // write
+            nvs_used = used_num;
+            err = nvs_set_i32(my_handle, "used_key", nvs_used);
+            if (err != ESP_OK) {
+                printf("Error (%s) NVS Set Failed!!\n", esp_err_to_name(err));
+            } 
+
+            err = nvs_commit(my_handle);
+            if (err != ESP_OK) {
+                printf("Error (%s) NVS Committing Failed!\n", esp_err_to_name(err));
+            }   
+        }
+    }
+
+    // Close
+    nvs_close(my_handle);
+
+    return nvs_used;
+}
+
+
+#if 1
+
+uint32_t spiffs_file_size(const char *filename)
+{
+    const char *TAG = "APP_SPIFFS"; 
+    // Check if destination file exists
+    struct stat st;
+    if (stat(filename, &st) != 0) {  // file does not exist
+        //ESP_LOGE(TAG, "Failed to file does not exist");
+        return 0;
+    } 
+    uint32_t file_size = st.st_size;
+    ESP_LOGI(TAG, "%s size: %d", filename, file_size);
+    return file_size;
+}
+
+void mqtt_spiffs_write(mqtt_data_t mqtt_data)
 {
     const char *TAG = "APP_SPIFFS"; 
 
@@ -324,10 +397,8 @@ void mqtt_spiffs_write(mqtt_data_t mqtt_info)
         return;
     }
 
-    ESP_LOGI(TAG, "File written");
-
-    fwrite((void*)&mqtt_info, sizeof(uint8_t), sizeof(mqtt_data_t), file);
-
+    ESP_LOGI(TAG, "File written spiffs");
+    fwrite((void*)&mqtt_data, sizeof(uint8_t), sizeof(mqtt_data_t), file);
     fclose(file);  
 }
 
@@ -335,100 +406,74 @@ void mqtt_spiffs_erase(void)
 {
     const char *TAG = "APP_SPIFFS"; 
 
-    int err = remove("/spiffs/mqtt.bin");
-    if (err != 0) {
-        ESP_LOGI(TAG, "File remove err: %d", err);
-    } 
-}
-
-void mqtt_spiffs_read(mqtt_data_t *mqtt_info)  
-{
-    const char *TAG = "APP_SPIFFS"; 
-
-    FILE* file = fopen("/spiffs/mqtt.bin", "rb");
-    if (file == NULL) {
-        ESP_LOGE(TAG, "Failed to open file for reading");
-        return;
-    }
-
-    // Check if destination file exists
-    struct stat st;
-    if (stat("/spiffs/mqtt.bin", &st) == 0) {
-        // Delete it if it exists
-        // unlink("/spiffs/mqtt.bin");
-        //file_size = st.st_size;   // 获取文件大小
-    } 
-
-    int info_num = st.st_size / sizeof(mqtt_data_t);  // 计算一共有多少条数据
-
-    ESP_LOGI(TAG, "info_num = %d", info_num);
-
-    for (int i = 0; i < info_num; i++) {
-		// fgets((char *)&mqtt_info, sizeof(mqtt_data_t), file);
-        fread((void*)mqtt_info, sizeof(uint8_t), sizeof(mqtt_data_t),  file);   
-
-        printf("time: %08llx  len: %d\r\n", mqtt_info->timestamp, mqtt_info->len);
-        for (int len = 0; len < mqtt_info->len; len++) {
-            printf("%02x ", mqtt_info->value[len]);
-        } printf("\r\n");
-	}
-
-    fclose(file);
-}
-
-
-
-#if 0
-void mqtt_spiffs_data()
-{
-    const char *TAG = "APP_SPIFFS"; 
-
-    // Use POSIX and C standard library functions to work with files.
-    FILE* file = fopen("/spiffs/mqtt.bin", "ab+");   // 打开一个用于读取的文件。该文件必须存在。
+    FILE* file = fopen("/spiffs/mqtt.bin", "w");   // 创建一个用于写入的空文件,并清空已有数据
     if (file == NULL) {
         ESP_LOGE(TAG, "Failed to open file for new create");
         return;
     }
+    fclose(file);  
 
-    // Check if destination file exists before renaming
-    int file_size = 0;
-    struct stat st;
-    if (stat("/spiffs/mqtt.bin", &st) == 0) {
-        // Delete it if it exists
-        // unlink("/spiffs/mqtt.bin");
-        file_size = st.st_size;   // 获取文件大小
-    } 
+    int err = remove("/spiffs/mqtt.bin");
+    if (err != 0) {
+        ESP_LOGI(TAG, "File mqtt.bin remove err: %d", err);
+    } else {
+        ESP_LOGI(TAG, "File mqtt.bin remove ok");
+    }
+}
 
-    ESP_LOGI(TAG, "File size = %d", file_size);
+int mqtt_spiffs_read(mqtt_data_t *mqtt_data)  
+{
+    const char *TAG = "APP_SPIFFS"; 
 
-    mqtt_data_t mqtt_buff = {
-        .timestamp = 0x12345678,
-        .value = {0x12, 0x34, 0x56}
-    };
-
-    ESP_LOGI(TAG, "File written");
-    fwrite((void*)&mqtt_buff, sizeof(uint8_t), sizeof(mqtt_data_t), file);
-    fclose(file);
-
-    // Open renamed file for reading
-    ESP_LOGI(TAG, "Reading file");
-    
-    mqtt_data_t mqtt_rbuff = { 1, { 1 , 2 , 3} };
-
-    file = fopen("/spiffs/mqtt.bin", "rb");
-    if (file == NULL) {
-        ESP_LOGE(TAG, "Failed to open file for reading");
-        return;
+    uint32_t data_size = spiffs_file_size("/spiffs/mqtt.bin");
+    if (data_size == 0) {
+        return 0;
     }
 
-    for (int i = 0; i < file_size / sizeof(mqtt_data_t); i++) {
-		// fgets((char *)&mqtt_rbuff, sizeof(mqtt_data_t), file);
-        fread((void*)&mqtt_rbuff, sizeof(uint8_t), sizeof(mqtt_data_t),  file);   
-        printf("\r\n%08llx - %02x %02x %02x\r\n", mqtt_rbuff.timestamp, mqtt_rbuff.value[0], mqtt_rbuff.value[1], mqtt_rbuff.value[2]);
+    uint32_t total_num = data_size / sizeof(mqtt_data_t);  // 计算一共有多少条数据
+    ESP_LOGI(TAG, "total_num = %d", total_num);
+    if (total_num == 0) {
+        return -2;
+    } 
+
+    FILE* file = fopen("/spiffs/mqtt.bin", "rb");
+    if (file == NULL) {
+        ESP_LOGE(TAG, "Failed to open file for reading");
+        return -3;
+    }
+
+    int32_t used_num = 0; 
+    used_num = mqtt_nvs_used(used_num, NVS_CMD_READ);    // 读取发布了多少了 
+    ESP_LOGI(TAG, "used_num = %d", used_num);
+ 
+    if (used_num == total_num) {     // 全部完成，全部清零
+        used_num = 0;
+        mqtt_nvs_used(used_num, NVS_CMD_WRITE);      // 写0
+        mqtt_spiffs_erase(); 
+        fclose(file);
+        return 0;
+    } 
+        
+    fseek(file, used_num*sizeof(mqtt_data_t), SEEK_SET);  // 从文件头开始设置偏移指针位置
+
+    mqtt_nvs_used(++used_num, NVS_CMD_WRITE);      // 写++
+
+    //for (int i = 0; i < data_num; i++) 
+    {
+		// fgets((char *)&mqtt_info, sizeof(mqtt_data_t), file);
+        fread((void*)mqtt_data, sizeof(uint8_t), sizeof(mqtt_data_t),  file);   
+
+        printf("time: %ld  len: %d\r\n", mqtt_data->timestamp, mqtt_data->len);
+        for (int len = 0; len < mqtt_data->len; len++) {
+            printf("%02x ", mqtt_data->value[len]);
+        } printf("\r\n");
 	}
 
     fclose(file);
+
+    return 1;
 }
+
 #endif
 
 void app_user_init(void)
