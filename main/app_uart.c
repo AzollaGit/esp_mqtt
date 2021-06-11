@@ -27,6 +27,7 @@
 #include "sdkconfig.h"
 #include "esp_spiffs.h"
 
+#include "app_config.h"
 #include "app_uart.h"
 #include "app_user.h"
 #include "app_mqtt.h"
@@ -48,16 +49,16 @@ static const char *TAG = "APP_UART";
  * - Pin assignment: see defines below (See Kconfig)
  */
 
-#define UART_PIN_TXD            (22)
-#define UART_PIN_RXD            (23)
+#define UART_PIN_TXD            APP_UART_PIN_TXD
+#define UART_PIN_RXD            APP_UART_PIN_RXD
 #define UART_PIN_RTS            (UART_PIN_NO_CHANGE)
 #define UART_PIN_CTS            (UART_PIN_NO_CHANGE)
 
-#define UART_PORT_NUM           (1)
-#define UART_BAUD_RATE          (115200)
-#define UART_TASK_STACK_SIZE    (2048)
+#define UART_PORT_NUM           APP_UART_PORT_NUM
+#define UART_BAUD_RATE          APP_UART_BAUD_RATE
+#define UART_TASK_STACK_SIZE    APP_UART_TASK_STACK_SIZE
 
-#define UART_BUF_SIZE           (128)
+#define UART_BUF_SIZE           APP_UART_BUF_SIZE
 
 void uart_write_data(const uint8_t *data, int len)
 {

@@ -54,6 +54,7 @@ static void initialize_sntp(void)
 {
     ESP_LOGI(TAG, "Initializing SNTP");
     sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    // https://dns.iui.im/ntp/    挑阿里/腾讯的
     sntp_setservername(0, "ntp4.aliyun.com");
     sntp_setservername(1, "time4.cloud.tencent.com");
     sntp_setservername(2, "pool.ntp.org");

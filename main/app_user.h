@@ -1,11 +1,11 @@
 #pragma once
 
 #include "stdint.h"
-
+#include "app_config.h"
 
 extern uint16_t lightChannelValue;
-
-#define BUFF_MAX_SIZE           (32)    //  数据缓存大小
+ 
+#define BUFF_MAX_SIZE          APP_MQTT_UART_BUFF_SIZE   //  数据缓存大小
 
 typedef struct 
 {
@@ -13,12 +13,6 @@ typedef struct
     uint8_t value[BUFF_MAX_SIZE];
     uint8_t len;
 }mqtt_data_t;
-
-// typedef struct 
-// {
-//     uint16_t total;     // 总的目标数
-//     uint16_t used;      // 试用数（完成的数目）
-// }mqtt_info_t;
 
 
 #define NVS_CMD_READ       0

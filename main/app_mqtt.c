@@ -23,13 +23,11 @@
 #include "freertos/queue.h"
 #include "freertos/event_groups.h"
 
-// #include "lwip/sockets.h"
-// #include "lwip/dns.h"
-// #include "lwip/netdb.h"
-
 #include "esp_log.h"
 #include "mqtt_client.h"
 
+
+#include "app_config.h"
 #include "app_user.h"
 #include "app_mqtt.h"
 #include "app_uart.h"
@@ -38,11 +36,14 @@ static const char *TAG = "APP_MQTT";
 
 static esp_mqtt_client_handle_t client_handle;
 
-static const char *mqtt_topic_read = "/topic/read";
-static const char *mqtt_topic_write = "/topic/write";
+
+
+static const int mqtt_qos = APP_MQTT_QOS;  
+static const char *mqtt_topic_read  = APP_MQTT_TOPIC_READ;
+static const char *mqtt_topic_write = APP_MQTT_TOPIC_WRITE;
 // static const char *mqtt_topic_read = "read";
 // static const char *mqtt_topic_write = "write";
-static const int mqtt_qos = 2;  
+
 
 static uint8_t mqtt_event_connect = 0;   // 1: connect; 0: disconnect.
 //static esp_mqtt_event_id_t  mqtt_event_id = MQTT_EVENT_ANY;
@@ -84,7 +85,7 @@ void mqtt_publish_task(void * arg)
 
         if (xQueueReceive(mqtt_publish_queue, &mqtt_data, portMAX_DELAY) == pdPASS) {  // 接收UART数据
             ESP_LOGI(TAG, "mqtt_data.value: %s", mqtt_data.value);
-            // 这里需要把MQTT数据格式重新排列： TIME（8/Byte） + DATA(len/Byte)
+            // 这里需要把MQTT数据格式重新排列： TIME（10/Byte） + DATA(len/Byte)
             char *timestamp_string = NULL;
             asprintf(&timestamp_string, "%010ld", mqtt_data.timestamp);  // 时间戳有10位数字
             memcpy(mqtt_txbuff, timestamp_string, 10);
@@ -134,7 +135,7 @@ void spiffs_read_task(void *arg)
 
             if (mqtt_reissue_ack) {  // 没有应答就一直发，除非断线
                 if (mqtt_publish_queue != NULL) {
-                    ESP_LOGI(TAG, "spiffs_read_task...");
+                    // ESP_LOGI(TAG, "spiffs_read_task...");
                     xQueueSend(mqtt_publish_queue, &mqtt_data, 10 / portTICK_RATE_MS);    
                 }
             }
@@ -236,16 +237,18 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     }
 }
 
+ 
+
 static void mqtt_app_start(void)
 {
     esp_mqtt_client_config_t mqtt_cfg = {
-        .host = "emqx.qinyun575.cn",
-        .port = 1883,
-        .username = "emqx",
-        .password = "public",
-        .lwt_qos = mqtt_qos,
-        .buffer_size = 512,
-        .out_buffer_size = 512,
+        .host = APP_MQTT_HOST,
+        .port = APP_MQTT_PORT,
+        .username = APP_MQTT_USERNAME,
+        .password = APP_MQTT_USERWORD,
+        .lwt_qos  = APP_MQTT_QOS,
+        .buffer_size = APP_MQTT_BUFF_SIZE,
+        .out_buffer_size = APP_MQTT_BUFF_SIZE,
         //.cert_pem = (const char *)mqtt_mqtt_broker_pem_start,
     };
 

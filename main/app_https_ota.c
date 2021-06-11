@@ -96,7 +96,7 @@ static void ota_example_task(void *pvParameter)
              running->type, running->subtype, running->address);
 
     esp_http_client_config_t config = {
-        .url = "https://azolla.qinyun575.cn/esp32_mqtt.bin",  //CONFIG_EXAMPLE_FIRMWARE_UPG_URL,
+        .url = "https://azolla.qinyun575.cn/esp_mqtt.bin",  //CONFIG_EXAMPLE_FIRMWARE_UPG_URL,
         .cert_pem = (char *)server_cert_pem_start,
         .timeout_ms = CONFIG_EXAMPLE_OTA_RECV_TIMEOUT,
         .keep_alive_enable = true,

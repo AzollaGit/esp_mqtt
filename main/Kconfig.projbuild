@@ -29,3 +29,97 @@ menu "Example Configuration"
             Maximum time for reception
 
 endmenu
+
+menu "APP Configuration"
+    menu "MQTT Configuration"
+
+        config APP_MQTT_HOST
+            string "MQTT host"
+            default "emqx.qinyun575.cn"
+
+        config APP_MQTT_PORT
+            int "MQTT port"
+            default 1883 
+
+        config APP_MQTT_USERNAME
+            string "MQTT user name"
+            default "emqx" 
+
+        config APP_MQTT_USERWORD
+            string "MQTT user password"
+            default "public" 
+
+        config APP_MQTT_QOS
+            int "MQTT qos"
+            default 2           
+
+        config APP_MQTT_BUFF_SIZE
+            int "MQTT RX/TX buff size"
+            default 128 
+
+        config APP_MQTT_TOPIC_READ
+            string "MQTT topic read"
+            default "/topic/read"  
+
+        config APP_MQTT_TOPIC_WRITE
+            string "MQTT topic read"
+            default "/topic/write"     
+
+    endmenu
+
+
+    menu "UART Configuration"
+
+        config APP_UART_PORT_NUM
+            int "UART port number"
+            range 0 2 if IDF_TARGET_ESP32
+            range 0 1 if IDF_TARGET_ESP32S2 || IDF_TARGET_ESP32C3
+            default 2 if IDF_TARGET_ESP32
+            default 1 if IDF_TARGET_ESP32S2 || IDF_TARGET_ESP32C3
+            help
+                UART communication port number for the example.
+                See UART documentation for available port numbers.
+
+        config APP_UART_BAUD_RATE
+            int "UART communication speed"
+            range 1200 115200
+            default 115200
+            help
+                UART communication speed for Modbus example.
+
+        config APP_UART_PIN_RXD
+            int "UART RXD pin number"
+            range 0 34 if IDF_TARGET_ESP32
+            range 0 46 if IDF_TARGET_ESP32S2
+            range 0 19 if IDF_TARGET_ESP32C3
+            default 5
+            help
+                GPIO number for UART RX pin. See UART documentation for more information
+                about available pin numbers for UART.
+
+        config APP_UART_PIN_TXD
+            int "UART TXD pin number"
+            range 0 34 if IDF_TARGET_ESP32
+            range 0 46 if IDF_TARGET_ESP32S2
+            range 0 19 if IDF_TARGET_ESP32C3
+            default 4
+            help
+                GPIO number for UART TX pin. See UART documentation for more information
+                about available pin numbers for UART.
+
+        config APP_UART_TASK_STACK_SIZE
+            int "UART receive task stack size"
+            range 1024 16384
+            default 2048
+            help
+                Defines stack size for UART echo example. Insufficient stack size can cause crash.
+
+        config APP_UART_BUF_SIZE
+            int "UART read/write buff size"
+            range 128  4096
+            default 128  
+
+    endmenu
+
+
+endmenu

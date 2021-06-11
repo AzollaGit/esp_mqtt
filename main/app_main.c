@@ -1,6 +1,7 @@
 /* ESP32 MQTT project
    @author： Azolla
    @time  :  2021.06.05
+   
    This example code is in the Public Domain (or CC0 licensed, at your option.)
 
    Unless required by applicable law or agreed to in writing, this
@@ -28,7 +29,6 @@
 #include "app_user.h"
 #include "app_sntp.h"
 #include "app_uart.h"
-
 
 static const char *TAG = "APP_MAIN";
 
